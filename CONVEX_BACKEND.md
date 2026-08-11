@@ -1,10 +1,11 @@
 # Convex backend reference (for the separate admin web app repo)
 
 This document describes the `convex/` backend as it exists in the **student-semester-
-reminder** mobile app repo (Koforidua Technical University final-year project). The
-admin dashboard is being built as a **separate web app in a separate repo**, connecting
-to the same Convex project/deployments. Read this before writing any admin backend code
-— it tells you what exists, what's missing, and what's unsafe to build on.
+reminder** mobile app repo (Koforidua Technical University final-year project). This
+admin dashboard is a **separate web app in a separate repo** (`termio-admin`),
+connecting to the same Convex project/deployment as a pure client. Read this before
+writing any admin backend code — it tells you what exists, what's missing, and what's
+unsafe to build on.
 
 > **Keep this file in sync.** Any admin-side change that assumes something new from the
 > Convex backend (a new mutation, a new field, a changed contract) must be reflected
@@ -16,17 +17,12 @@ to the same Convex project/deployments. Read this before writing any admin backe
 Convex functions are deployed from whichever `convex/` folder last runs
 `npx convex deploy` against a given deployment. **Two repos cannot both own one Convex
 deployment's backend code** — whichever deploys last silently overwrites the other's
-schema and functions. Before writing any backend code here, confirm with the project
-owner which of these is true:
-
-- **A. This (admin) repo is client-only.** It never runs `npx convex deploy`. Every
-  query/mutation it needs must be written in and deployed from the mobile repo's
-  `convex/`, then consumed here via the generated client types. New admin mutations get
-  added to the mobile repo, not this one.
-- **B. `convex/` gets extracted into its own repo/package**, and both apps depend on it
-  externally.
-
-Do not assume either — ask before scaffolding a `convex/` directory in the admin repo.
+schema and functions. **Settled**: this (admin) repo is client-only. It never runs
+`npx convex deploy`. Every query/mutation it needs is written in and deployed from the
+mobile repo's `convex/`, then consumed here via `anyApi` (see `AGENTS.md`). New admin
+mutations get added to the mobile repo, not this one — `convex/_generated/*` here is
+type stubs only, synced by `npx convex dev`, never hand-edited. Don't scaffold a real
+`convex/` directory in this repo; if one ever appears, delete it.
 
 ## Deployments
 
@@ -57,7 +53,7 @@ app must target one of these same deployments explicitly per environment (dev vs
 | `users` (extends `authTables.users`) | `...authTables.users.validator.fields`, `role`, `institutionId?` | `email`, `phone` | auth system + admin/student signup |
 | `academicYears` | `title`, `startDate`, `endDate` | — | **admin (no mutations exist yet)** |
 | `semesters` | `title`, `startDate`, `endDate`, `isActive`, `academicYearId?` | `by_isActive`, `by_academicYearId` | **admin (no mutations exist yet)** |
-| `institutions` | `name`, `emailDomain` | — | admin (currently 1 seeded row: KTU) |
+| `institutions` | `name`, `emailDomain`, `logoStorageId?` | — | `logoStorageId` — admin, via `institutions.ts#setInstitutionLogo`; `name`/`emailDomain` still seed-only, no mutation |
 | `faculties` | `institutionId`, `name` | `by_institutionId` | admin — `createFaculty`/`updateFaculty`/`removeFaculty` |
 | `departments` | `facultyId`, `name` | `by_facultyId` | admin — `createDepartment`/`updateDepartment`/`removeDepartment` |
 | `programs` | `departmentId`, `name` | `by_departmentId` | admin — `createProgram`/`updateProgram`/`removeProgram` |
@@ -102,6 +98,25 @@ name/institutionId when re-running against an existing email; this is also the e
 "forgot admin password" story, since re-running `createAdminAccount` resets the
 password). **Neither is client-callable.** This is how the first admin account the web
 app logs in as gets created — via Convex dashboard/CLI, not a signup form.
+
+**`adminAuth.ts`** — the shared guard every admin-only mutation goes through:
+`requireAdmin` (throws unless the caller's `users` row has `role === 'admin'`, returns
+that row) and `resolveAdminInstitutionId` (reads `institutionId` off it, never
+client-passed). `academicStructure.ts`, `institutions.ts`, and any future admin
+mutation should reuse this rather than a new ad hoc check.
+
+**`adminDashboard.ts`**: `getOverview` (query, `requireAdmin`-gated) — one aggregate
+call for the admin Dashboard's stat tiles, active semester, and faculty-breakdown
+list, instead of one round-trip per stat. Read this file's own comment before adding a
+new stat — most of the tables it counts have no index on `institutionId` yet, so it's
+manually scoped per call, not something to copy-paste blindly.
+
+**`institutions.ts`** (new since this doc was first written): `getBranding` (query,
+`requireAdmin`-gated — resolves the caller's own institution and returns its logo URL
+via `ctx.storage.getUrl`, or `null` if none is set), `generateLogoUploadUrl` /
+`setInstitutionLogo` (mutations, `requireAdmin`-gated — the standard Convex
+upload-URL-then-storageId flow; `setInstitutionLogo` deletes the previous blob before
+patching the new `logoStorageId` in, so replacing a logo doesn't orphan storage).
 
 **`alerts.ts`** — two unrelated concerns in one file: `listBySemester` (query,
 semesterActivities passthrough — the ONE query in this file relevant to admin, as a
@@ -153,8 +168,10 @@ check — the admin web app's own login/role-check should call this same query),
 `listOverduePending` (internalQuery), `toggleComplete` — all ctx.auth-derived,
 entirely student-owned, N/A to admin.
 
-**`semesters.ts`**: `getActive` (query) — the only function in this file. **No write
-mutation yet** — admin app needs to add semester create/update/activate.
+**`semesters.ts`**: `getActive` (query, open to any signed-in caller), `list` (query,
+every semester most-recent-first — powers the admin Semesters list/picker), `get`
+(query, single semester by id — powers the admin semester detail page). **Still no
+write mutation** — admin app needs to add semester create/update/activate.
 
 **`pushDelivery.ts`** (all internalAction, server-only): `sendPushToUser`,
 `notifyNewEvent`. **Any admin "publish a semesterActivity" mutation must call
@@ -182,23 +199,30 @@ ctx.auth-derived), `listForUser`/`removeToken` (internal, server-only). N/A to a
 - `crons.ts` — registers the 15-minute overdue sweep.
 - `http.ts` — minimal, Convex Auth's own HTTP routes.
 
-## Known gaps (what the admin app is actually for)
+## Known gaps (what's still left to build)
 
-Everything marked **"admin (no mutations exist yet)"** in the schema table above — the
-entire institutional hierarchy (institutions → faculties → departments → programs →
-academicClasses → divisions), courses, courseSections, semesters, academicYears, and
-semesterActivities — currently has **zero write mutations**, authenticated or
-otherwise. This is the actual scope of the admin app: design and add
-`role === 'admin'`-checked mutations for all of it.
+The institutional hierarchy (faculties → departments → programs → academicClasses →
+divisions) and the institution logo now both have real `role === 'admin'`-checked
+mutations (`academicStructure.ts`, `institutions.ts`) — no longer a gap, despite what
+an earlier version of this doc said. What's still genuinely missing, all **zero write
+mutations, authenticated or otherwise**:
 
-The one exception is `courseActivities`, which already has `create`/`update`/`remove`
-mutations, but they're unauthenticated dead code that predates the student/admin
-ownership split — replace them, don't extend them.
-
-`studentProfiles.indexNumber` is documented as "identity, routes through admin" in the
-mobile app's domain docs, but no admin mutation to actually edit it exists anywhere yet
-— if student-identity correction is in scope for this admin app, that mutation needs to
-be designed from scratch.
+- `courses` / `courseSections` — no admin create/update path at all yet; the admin
+  Courses page is still a "coming soon" placeholder. This is the blocker for the
+  timetable-upload feature (see the admin repo's own planning notes) — parsing a
+  document into structured rows is only half the work, there's nowhere to write them
+  yet.
+- `semesters` / `academicYears` — read-only (`get`/`list`/`getActive`,
+  `getCurrentYearOverview`), no create/update/activate.
+- `semesterActivities` — read-only (`alerts.ts#listBySemester`), no admin create —
+  this is the other half of the timetable-upload feature (the Academic Calendar
+  → semesterActivities mapping).
+- `studentProfiles.indexNumber` — documented as "admin-correctable identity field,"
+  no mutation exists to actually do that.
+- `courseActivities` — the one table with mutations that already exist
+  (`create`/`update`/`remove`), but they're unauthenticated dead code predating the
+  student/admin ownership split, and nothing calls them. Replace them with
+  `role === 'admin'`-checked equivalents when building Courses — don't extend them.
 
 ## Security pattern to follow
 

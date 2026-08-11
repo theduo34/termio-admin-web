@@ -7,11 +7,11 @@ This repo is a **pure client** of the shared Convex backend owned by `student-se
 ```
 termio-admin/          ← Next.js web app (you are here)
   convex.json          ← { "functions": "../student-semester-reminder/convex/" }
-  .env.local           ← CONVEX_URL = https://colorless-shepherd-537.convex.cloud
+  .env.local           ← points at the same deployment, see Environment variables below
 
 student-semester-reminder/   ← Mobile app (owns the backend)
   convex/              ← ALL backend functions live here
-  .env.local           ← CONVEX_URL = https://colorless-shepherd-537.convex.cloud
+  .env.local           ← points at the same deployment
 ```
 
 Both apps point to the **same** Convex deployment. `convex.json` in this repo
@@ -52,10 +52,16 @@ const faculties = useQuery(anyApi.academicStructure.listFaculties)
 
 ## Environment variables
 
+See `.env.example` for the current list — copy it to `.env.local` and fill in the
+same values the mobile repo's own `.env.local` uses (both apps point at one
+deployment):
+
 | Variable | Value |
 |---|---|
-| `CONVEX_URL` | `https://colorless-shepherd-537.convex.cloud` |
-| `AUTH_RESEND_KEY` | Resend API key (email OTP) |
+| `CONVEX_DEPLOYMENT` | `dev:colorless-shepherd-537` (used by `npx convex dev`) |
+| `NEXT_PUBLIC_CONVEX_URL` | `https://colorless-shepherd-537.convex.cloud` |
+| `NEXT_PUBLIC_CONVEX_SITE_URL` | `https://colorless-shepherd-537.convex.site` |
+| `AUTH_RESEND_KEY` | Resend API key (email OTP) — shared across every deployment |
 
 ## Admin account creation
 
