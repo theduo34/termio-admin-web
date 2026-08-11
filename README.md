@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Termio Admin
 
-## Getting Started
+The admin dashboard for **Termio**, a student semester reminder app. Manages an
+institution's academic hierarchy, semesters, courses, and published activities — the
+data the [student mobile app](https://github.com/theduo34/student-semester-reminder)
+reads and reminds students about.
 
-First, run the development server:
+Next.js 16 (App Router, Turbopack), Convex Auth, Tailwind v4. This app does **not**
+own the backend — it's a pure client of the Convex deployment defined in the sibling
+`student-semester-reminder` repo. See [BACKEND.md](./BACKEND.md) before touching
+anything Convex-related.
+
+## Prerequisites
+
+- Node 20+
+- npm (or bun — `bun.lock` is present and both work)
+- The `student-semester-reminder` repo, cloned as a **sibling directory** — not
+  optional. `convex.json` points at `../student-semester-reminder/convex/`, so this
+  app can't resolve backend functions/types without it sitting right next to this one:
+
+  ```
+  some-folder/
+    termio-admin/                  ← this repo
+    student-semester-reminder/     ← the mobile repo, same parent folder
+  ```
+
+## Setup
+
+1. Clone both repos side by side as shown above.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Copy the env template and fill in the values:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Both apps talk to the same Convex deployment, so use the **same values** as the
+   mobile repo's own `.env.local` — ask a maintainer for them, or see
+   [BACKEND.md](./BACKEND.md) to provision your own deployment from scratch.
+4. Sync the backend once (from either repo — they share one deployment):
+   ```bash
+   npx convex dev
+   ```
+   First run prompts a GitHub login for Convex. Once it prints "Convex functions
+   ready!", `Ctrl+C` out — you don't need to keep it running for day-to-day admin dev,
+   only when the mobile repo's `convex/` has changed since you last synced.
+5. Start the dev server:
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000) — it redirects to `/login`.
+6. Sign in with the seeded demo admin account:
+   ```
+   admin@example.com / admin1234
+   ```
+   (Seeded by the mobile repo's `convex/seed.ts` — see that repo's README if it
+   doesn't work and needs re-seeding.)
+
+## Scripts
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Start the dev server (Turbopack) |
+| `npm run build` | Production build |
+| `npm start` | Run a production build |
+| `npm run lint` | ESLint |
+
+## Project layout
+
+- `app/(auth)/login` — the sign-in page (no signup — admin accounts are CLI-only, see
+  below)
+- `app/(protected)/admin/[institutionId]/` — every real admin page (dashboard,
+  hierarchy, semesters, courses, publish, settings), gated by a server-side
+  `role === "admin"` check
+- `components/ui/` — base primitives (Base UI, not Radix)
+- `components/shared/` — cross-page building blocks (layout, dialogs, dashboard cards)
+- `components/features/` — page-specific feature components
+- `convex/_generated/` — type stubs only, synced from the mobile repo's deployment
+  (see Prerequisites) — never hand-edited, never the source of real backend code
+
+## Creating an admin account
+
+There's no sign-up form. Admin accounts are created from the **mobile repo**, via CLI:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd student-semester-reminder
+npx convex run admins:createAdminAccount \
+  '{"email":"you@example.com","password":"...","name":"Your Name","institutionId":"<id>"}'
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+See [BACKEND.md](./BACKEND.md) for details.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Further reading
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [BACKEND.md](./BACKEND.md) — how the two repos share one Convex deployment, and the
+  rule about never letting this repo run `npx convex deploy`
+- [AGENTS.md](./AGENTS.md) — routing/auth architecture and project conventions
+- [CONVEX_BACKEND.md](./CONVEX_BACKEND.md) — schema and function reference (written
+  early in the project; some tables it lists as "no mutations yet" now have them —
+  cross-check against the mobile repo's own `convex/` before relying on it)
