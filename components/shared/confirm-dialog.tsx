@@ -44,6 +44,14 @@ export function ConfirmDialog({
     try {
       await onConfirm()
       onOpenChange(false)
+    } catch {
+      // Swallowed deliberately — every onConfirm callback in this app already
+      // catches its own failure and shows a toast (a blocked delete like "still has
+      // departments" is expected, user-facing feedback, not a crash). This dialog
+      // only needs to know a failure happened so it stays open instead of closing;
+      // letting the rejection keep propagating past here turned every blocked
+      // delete into an "Uncaught Error" dev overlay on top of the toast that
+      // already explained it.
     } finally {
       setPending(false)
     }
