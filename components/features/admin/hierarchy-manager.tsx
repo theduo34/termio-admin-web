@@ -657,7 +657,22 @@ export function HierarchyManager() {
         open={deleteDialog !== null}
         onOpenChange={(open) => !open && setDeleteDialog(null)}
         title={`Delete ${deleteDialog?.name ?? ""}?`}
-        description="This can't be undone. Anything nested underneath must be removed first."
+        description={
+          deleteDialog
+            ? {
+                faculty:
+                  "This can't be undone — everything nested underneath is deleted too: departments, programs, classes, divisions, courses, and any enrolled students' profiles.",
+                department:
+                  "This can't be undone — everything nested underneath is deleted too: programs, classes, divisions, courses, and any enrolled students' profiles.",
+                program:
+                  "This can't be undone — everything nested underneath is deleted too: classes, divisions, courses, and any enrolled students' profiles.",
+                class:
+                  "This can't be undone — everything nested underneath is deleted too: divisions, courses, and any enrolled students' profiles.",
+                division:
+                  "This can't be undone. Course sections scheduled for it are deleted too; students assigned to it fall back to undivided instead of losing their profile.",
+              }[deleteDialog.level]
+            : ""
+        }
         pendingLabel="Deleting..."
         onConfirm={handleDelete}
       />
